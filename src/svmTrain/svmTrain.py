@@ -471,7 +471,22 @@ class svm(object):
                 Y.append(int(tmp[0].strip()))
                 X.append(map(float,tmp[1:]))
         return (X,Y)
-            
+    
+    def readDataSeqLibsvmForm(self,datasetPath):
+        X=[]
+        Y=[]
+        with open(datasetPath,'r') as f:
+            for line in f:
+                tmp=line.strip().split(' ')
+                Y.append(int(tmp[0].strip()))
+                tempX=[0.0 for row in range(1000)]
+                for element in tmp[1:]:
+                    tt=element.strip().split(':')
+                    tempX[int(tt[0])-1]=float(tt[1])
+               
+                X.append(tempX)
+        return (X,Y)
+       
     def readTrainData(self,datasetPath):
         '''
             思路如下：首先读入数据，解析成class- 数据对的形式，
@@ -531,8 +546,8 @@ class svm(object):
         首先读入train和test两个set，进行测试，最后输出果效
         '''
         #get the data
-        (trainSet,trainLabel)=self.readDataSeq('D:/Project/Java/helloWorld/svmData/2class exp/Training docVec chi.txt')
-        (testSet,testLabel)=self.readDataSeq("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Test docVec chi.txt")
+        (trainSet,trainLabel)=self.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/windows/train.txt")
+        (testSet,testLabel)=self.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/windows/test.txt")
         ParaResultList={}
         if method=="linear":
             self.LinearGridSearch(trainSet=trainSet,trainLabel=trainLabel,testSet=testSet,testLabel=testLabel,ParaResultList=ParaResultList)
@@ -587,7 +602,7 @@ class svm(object):
                     ParaResultList[key].append(paraResult)
 
 
-    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-7.048,Cend=-7.047,Cstep=0.0001):                
+    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-13,Cend=12,Cstep=1):                
         '''
         思想同上，不再赘述
         '''

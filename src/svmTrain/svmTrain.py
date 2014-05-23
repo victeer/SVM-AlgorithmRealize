@@ -50,7 +50,8 @@ class svm(object):
         self.K=X2.reshape(-1,1)+X2.reshape(1,-1)+(-2)*np.dot(self.X,self.X.T)
         
         
-        self.K=np.exp(self.K*(-1/(2*Sigma**2)))
+        #self.K=np.exp(self.K*(-1/(2*Sigma**2)))
+        self.K=np.exp(self.K*(-Sigma))
 #        self.writeGaussianK()
         
         
@@ -221,6 +222,7 @@ class svm(object):
         model.Sigma=Sigma;
         model.first=first;
         model.second=second;
+        print 'size of support vector:',len(model.alphas)
         return model;          
         
     def getW(self):
@@ -258,16 +260,16 @@ class svm(object):
         elif(model.kernelFunction=='gaussianKernel'):
 
             X1=np.sum(X*X, axis=1)
-            print model.X.shape,type(model.X)
+            #print model.X.shape,type(model.X)
 
             X2=np.sum(model.X*model.X,axis=1)
-            print 'X2',X2.shape
-            print 'X1',X1.shape
-            print 'X',X.shape
-            print 'model.X',model.X.shape
+            #print 'X2',X2.shape
+            #print 'X1',X1.shape
+            #print 'X',X.shape
+            #print 'model.X',model.X.shape
             K=X2.reshape(1,-1)-2*np.dot(X,model.X.T);
             K=X1.reshape(-1,1)+K
-            K=np.exp(K*(-1/(2*model.Sigma**2)))
+            K=np.exp(K*(-model.Sigma))
             K=model.Y.reshape(1,-1)*K
             K=model.alphas.reshape(1,-1)*K
             p=np.sum(K,axis=1)
@@ -478,6 +480,9 @@ class svm(object):
         with open(datasetPath,'r') as f:
             for line in f:
                 tmp=line.strip().split(' ')
+                if tmp[0].strip()=='':
+                    #print "len=",len(tmp);
+                    continue
                 Y.append(int(tmp[0].strip()))
                 tempX=[0.0 for row in range(1000)]
                 for element in tmp[1:]:
@@ -546,8 +551,8 @@ class svm(object):
         首先读入train和test两个set，进行测试，最后输出果效
         '''
         #get the data
-        (trainSet,trainLabel)=self.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/windows/train.txt")
-        (testSet,testLabel)=self.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/windows/test.txt")
+        (trainSet,trainLabel)=self.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/tools/train.txt")
+        (testSet,testLabel)=self.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/tools/test.txt")
         ParaResultList={}
         if method=="linear":
             self.LinearGridSearch(trainSet=trainSet,trainLabel=trainLabel,testSet=testSet,testLabel=testLabel,ParaResultList=ParaResultList)
@@ -560,15 +565,15 @@ class svm(object):
         highC=None;
         print "key\ttrainAccuracy\t testAccuracy\t accuracy"
         for key in ParaResultList.keys():
-            paraResult=ParaResultList[key][0]
-            print str(key)+'\t'+str(paraResult.trainAccuracy)+'\t'+str(paraResult.testAccuracy)+'\t'+str(paraResult.accuracy);
-            if paraResult.accuracy>highAccuracy:
-                highAccuracy=paraResult.accuracy
-                highC=key;
+            for paraResult in ParaResultList[key]:
+                print str(key)+'\t'+str(paraResult.trainAccuracy)+'\t'+str(paraResult.testAccuracy)+'\t'+str(paraResult.accuracy);
+                if paraResult.accuracy>highAccuracy:
+                    highAccuracy=paraResult.accuracy
+                    highC=key;
         print "the final and best C is "+str(highC)+" accuracy is "+str(highAccuracy);
 
 
-    def GaussianGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-6,Cend=-5,Cstep=1,SigmaStart=-10,SigmaEnd=10,SigmaStep=1):
+    def GaussianGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=9,Cend=10,Cstep=1,SigmaStart=-7,SigmaEnd=-6,SigmaStep=1):
         '''
         思路：吃饭先穿衣，把trainSet和trainLabel输入train函数之中，给他一个超参数组合，
         得到模型，将testSet输入预测函数中得到预测标签，testLabel和预测标签同时输入计算准确度函数
@@ -577,32 +582,33 @@ class svm(object):
         传入paraResultList,直接对其进行修改，影响范围在全局所以不需要再传出来了。
         Attention: first and second modify 
         '''
-        for C in range(Cstart,Cend,Cstep):
-            for Sigma in range(SigmaStart,SigmaEnd,SigmaStep):
-                key=str(C)+","+str(Sigma);
-                print key
-                #begin to training
-                model=self.train(X=trainSet,Y=trainLabel,modifyY=True,Sigma=2**Sigma,C=2**C,kernelFunction='gaussianKernel')
-                if model.X.size==0:
-                    continue;
-                print "first is",model.first,"second is",model.second
-                '''
-                TO-DO
-                '''
-                predictTrain,temp=self.predict(model,trainSet)# i wanna ignore the p score ..
-                predictTest,temp=self.predict(model,testSet)   
-                paraResult=ParaResult()
-                paraResult.trainAccuracy=self.predictPricision(trainLabel, predictTrain)
-                paraResult.testAccuracy=self.predictPricision(testLabel, predictTest)
-                paraResult.accuracy=0.2*paraResult.trainAccuracy+0.8*paraResult.testAccuracy
-                if(ParaResultList.has_key(key)):
-                    ParaResultList[key].append(paraResult)
-                else:
-                    ParaResultList[key]=[]
-                    ParaResultList[key].append(paraResult)
+        for C in np.arange(Cstart,Cend,Cstep):
+            for Sigma in np.arange(SigmaStart,SigmaEnd,SigmaStep):
+                for passes in range(1,20,2):
+                    key=str(C)+","+str(Sigma);
+                    print key
+                    #begin to training
+                    model=self.train(X=trainSet,Y=trainLabel,modifyY=True,Sigma=2**Sigma,C=2**C,kernelFunction='gaussianKernel',max_passes=passes)
+                    if model.X.size==0:
+                        continue;
+                    print "first is",model.first,"second is",model.second
+                    '''
+                    TO-DO
+                    '''
+                    predictTrain,temp=self.predict(model,trainSet)# i wanna ignore the p score ..
+                    predictTest,temp=self.predict(model,testSet)   
+                    paraResult=ParaResult()
+                    paraResult.trainAccuracy=self.predictPricision(trainLabel, predictTrain)
+                    paraResult.testAccuracy=self.predictPricision(testLabel, predictTest)
+                    paraResult.accuracy=0.2*paraResult.trainAccuracy+0.8*paraResult.testAccuracy
+                    if(ParaResultList.has_key(key)):
+                        ParaResultList[key].append(paraResult)
+                    else:
+                        ParaResultList[key]=[]
+                        ParaResultList[key].append(paraResult)
 
 
-    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-13,Cend=12,Cstep=1):                
+    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-3.2,Cend=-2.5,Cstep=0.01):                
         '''
         思想同上，不再赘述
         '''
@@ -681,7 +687,7 @@ class Model(object):
         
 if __name__=="__main__":
     svm=svm()
-    svm.testSearch(method="linear")
+    svm.testSearch(method="gaussian")
     #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec.txt")
     #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec ig.txt")
     #models=svm.multiClassOne2One(dataset=dataset,kernelFunction='gaussianKernel')

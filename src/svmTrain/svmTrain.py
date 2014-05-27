@@ -298,6 +298,7 @@ class svm(object):
         return (pred,p);
     def predictPricision(self,oriY,preY):
         '''
+        it is the total precision
         calculate the precision rate according to the compare of oriY and preY
         '''
         right=0
@@ -307,7 +308,55 @@ class svm(object):
         print right, len(oriY),len(preY)       
         print "correct rate: ",float(right)/len(preY); 
         return float(right)/len(preY);
-    
+    def predictEachClassCriteria(self,oriY,preY):
+        '''
+        计算每个分类上的分类准确性和召回率,同时也返回总准确率
+        problem 怎样处理类别标签为-1的呢？
+        '''
+        right=0
+        oriClass={}
+        predictClass={}
+        rightClass={} #the labels which is predicted correct.
+        for i in range(len(oriY)):
+            if oriClass.has_key(oriY[i]):
+                oriClass[oriY[i]]=oriClass[oriY[i]]+1
+            else:
+                oriClass[oriY[i]]=1
+
+            if predictClass.has_key(preY[i]):
+                predictClass[preY[i]]=predictClass[preY[i]]+1
+            else:
+                predictClass[preY[i]]=1
+
+            if oriY[i]==preY[i]:
+                right+=1
+                if rightClass.has_key(preY[i]):
+                    rightClass[preY[i]]=rightClass[preY[i]]+1
+                else:
+                    rightClass[preY[i]]=1
+
+        #calculate the recall and precison
+        result={}
+        for label in oriClass.keys():
+            if rightClass.has_key(label):
+                #cal precision
+                if predictClass.has_key(label):
+                    precison=float(rightClass[label])/float(predictClass[label]);
+                else:
+                    precison=-1;
+                result[label]=[];
+                result[label].append(precison);
+                #recall
+                recall=float(rightClass[label])/float(oriClass[label])
+                result[label].append(recall);
+            else:
+                result[label]=[0,0];
+
+        for label in result.keys():
+            print label,"\t",result[label]
+        print "correct rate =",float(right)/len(preY)
+        return result;
+
     def printPreAndOriCompare(self,oriY,preY,out_name):
         file_out=open(out_name,'w');
         file_out.write('original Y \tpredict Y\n')
@@ -687,7 +736,23 @@ class Model(object):
         
 if __name__=="__main__":
     svm=svm()
-    svm.testSearch(method="gaussian")
+    #svm.testSearch(method="gaussian")
+
+
+    '''test the predictEachClassCriteria '''
+    (trainSet,trainLabel)=svm.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/tools/train.txt")
+    (testSet,testLabel)=svm.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/tools/test.txt")
+        
+    model=svm.train(X=trainSet,Y=trainLabel,modifyY=True,C=2**(-2.77),max_passes=20)
+                    
+    predictTrain,temp=svm.predict(model,trainSet)# i wanna ignore the p score ..
+    predictTest,temp=svm.predict(model,testSet)
+    print "train:"
+    svm.predictEachClassCriteria(trainLabel,predictTrain)
+    print "test:"
+    svm.predictEachClassCriteria(testLabel,predictTest)
+    '''test end '''
+
     #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec.txt")
     #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec ig.txt")
     #models=svm.multiClassOne2One(dataset=dataset,kernelFunction='gaussianKernel')

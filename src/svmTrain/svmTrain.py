@@ -7,7 +7,7 @@ Created on 2014-3-4
 import math;
 import random;
 import numpy as np;
-
+import copy
 class svm(object): 
     '''
     classdocs
@@ -23,7 +23,7 @@ class svm(object):
         calculate linear self.K for train function 
         '''
         self.K=np.dot(self.X,self.X.T)
-        print self.K.shape
+        
 #        self.K =[[0 for row in range(0,self.m)] for column in range(0,self.m)];
 #        for i in range(0,self.m):
 #            for j in range(i,self.m):
@@ -94,6 +94,7 @@ class svm(object):
 
         X  is a group of student. I like it.
         '''
+        print "type(Y)",type(Y)
         self.X=np.array(X);
         self.Y=Y
         if modifyY:
@@ -248,6 +249,7 @@ class svm(object):
         pred=[model.second for row in range(m)];
         
         if (model.kernelFunction=='linearKernel'):
+            print "X.shape",X.shape,"model.w.shape",model.w.shape,"model.b",model.b
             p=np.dot(X,model.w)+model.b
 #            for i in range(0,m):
 #                tmpP=0;
@@ -450,7 +452,7 @@ class svm(object):
         return models;
         
         
-    def multiClassOne2Rest(self,dataset,sigma=0.1,C=1,kernelFunction='linearKernel',tol=1e-3,max_passes=5):
+    def multiClassOne2Rest(self,dataset,method='linear',tol=1e-3,max_passes=5):
         '''
         Training function.
         思路：首先main函数把数据读入内存中，
@@ -471,10 +473,13 @@ class svm(object):
                     ##here i need to rejudge it. if the append work.
                     '''
                     X.extend(dataset[otherkey])
+
+            print len(dataset[otherkey])
+            print len(X)
             Y=[-1 for row in range(0,len(X))]
             ####批量赋值 does it work?
-            Y[0:firstSize]=[1 for row in range(0,firstSize)];
-            model=self.train(X,Y,first, second,Sigma=sigma,C=C,kernelFunction=kernelFunction,tol=tol,max_passes=max_passes)
+            Y[0:firstSize]=[first for row in range(0,firstSize)];
+            model=self.selectBestModel(X,Y,method=method)
             models.append(model)
 
         return models
@@ -484,7 +489,7 @@ class svm(object):
         for  x in X:
             print x;
         
-    def multiClassOne2One(self,dataset,sigma=0.1,C=1,kernelFunction='linearKernel',tol=1e-3,max_passes=5):
+    def multiClassOne2One(self,dataset,method='linear',tol=1e-3,max_passes=5):
         '''
         思路大体与one2rest一致，区别在在对输入数据的迭代中，
         本方法每次迭代对train函数的输入是两个不同的类别的数据，
@@ -494,27 +499,31 @@ class svm(object):
         
         for i, key in enumerate(dataset):#this method is ok.
             first=key;
-            X=list(dataset[key])
-            firstSize=len(X);
+            
+            
             for  j, otherkey in enumerate(dataset):
                 if j>i:
                     '''
                     ##here i need to rejudge it. if the append work.
                     '''
+                    X=list(dataset[key])
+                    firstSize=len(X);
                     second=otherkey;
                     X.extend(dataset[otherkey])
-                    Y=[-1 for row in range(0,len(X))]
+                    print len(dataset[otherkey])
+                    print len(X)
+                    Y=[second for row in range(0,len(X))]
                     ####批量赋值 does it work?
-                    Y[0:firstSize]=[1 for row in range(0,firstSize)];
+                    Y[0:firstSize]=[first for row in range(0,firstSize)];
 #                    X=np.array(X)
 #                    Y=np.array(Y)
-                    model=self.train(X=X,Y=Y,first=first, second=second,Sigma=sigma,C=C,kernelFunction=kernelFunction,tol=tol,max_passes=max_passes)
+                    model=self.selectBestModel(X=X,Y=Y,method=method)
                     models.append(model)
         print len(models)
         return models
     
 
-    def selectBestModel(self,X,Y,first,second,Sigma,C,kernelFunction,tol,max_passes,crossSetNum=4):
+    def selectBestModel(self,X,Y,method,crossSetNum=2):
         '''
         @return bestmodel
         本函数主要目的是选择最好的模型出来，
@@ -530,9 +539,10 @@ class svm(object):
         subSetY={}
         for i in range(0,crossSetNum):
             subSetX[i]=X[i:len(X):crossSetNum]
-            subSetY[i]=X[i:len(Y):crossSetNum]
+            subSetY[i]=Y[i:len(Y):crossSetNum]
         #begin to input to the parameter select function
         ParaResultList={}
+        
         for i in range(crossSetNum):
             #construct train and test set
             testSet=subSetX[i]# attetion please here whether it will be changed in the training function?
@@ -543,6 +553,7 @@ class svm(object):
                 if j!=i:
                     trainSet.extend(subSetX[j])
                     trainLabel.extend(subSetY[j])
+                print j
             #here you may test if the subset is changed?
             if method=="linear":
                 self.LinearGridSearch(trainSet=trainSet,trainLabel=trainLabel,testSet=testSet,testLabel=testLabel,ParaResultList=ParaResultList)
@@ -569,16 +580,17 @@ class svm(object):
                 highC=key
         X=trainSet
         Y=trainLabel
-        if method="linear":
+        if method=="linear":
             C=2**(float(highC))
-            model=self.train(X=X,Y=Y,first=first,second=second,C=C,kernelFunction="linearKernel",tol=tol,max_passes=max_passes)
-        else method="gaussian":
+            model=self.train(X=X,Y=Y,modifyY=True,C=C,kernelFunction="linearKernel",max_passes=20)
+        elif method=="gaussian":
             tmp=highC.split(",")
             C=2**float(tmp[0])
             Sigma=2**float(tmp[1])
-            model=self.train(X=X,Y=Y,first=first,second=second,C=C,Sigma=Sigma,kernelFunction="gaussianKernel",tol=tol,max_passes=max_passes)
+            model=self.train(X=X,Y=Y,modifyY=True,C=C,Sigma=Sigma,kernelFunction="gaussianKernel")
         else:
             print "no method support"
+            exit(0)
         #here should be known the accruacy on this two object?? if it is necessary?
         print "the final and best C is "+str(highC)+" accuracy is "+str(highAccuracy);
 
@@ -615,7 +627,33 @@ class svm(object):
         tmpY=Y[0:len(Y):2]
         tmpY.extend(Y[1:len(Y):2])
         return (tmpX,tmpY)
-       
+    
+    def readDatalibSvmFormToDict(self,datasetPath):
+        dataset={}
+        with open(datasetPath,'r') as f:
+            for line in f:
+                tmp=line.strip().split(' ')
+                if tmp[0].strip()=='':
+                    #print "len=",len(tmp);
+                    continue
+                Y=int(tmp[0].strip())
+                X=[0.0 for row in range(1000)]
+                for element in tmp[1:]:
+                    tt=element.strip().split(':')
+                    X[int(tt[0])-1]=float(tt[1])
+                
+                if dataset.has_key(Y):
+                    dataset[Y].append(X)
+                else:
+                    dataset[Y]=[]
+                    dataset[Y].append(X)
+            
+        return dataset
+
+
+
+
+
     def readTrainData(self,datasetPath):
         '''
             思路如下：首先读入数据，解析成class- 数据对的形式，
@@ -697,7 +735,7 @@ class svm(object):
         print "the final and best C is "+str(highC)+" accuracy is "+str(highAccuracy);
 
 
-    def GaussianGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-13,Cend=11,Cstep=4,SigmaStart=-13,SigmaEnd=3,SigmaStep=3):
+    def GaussianGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-5,Cend=15,Cstep=3,SigmaStart=-15,SigmaEnd=3,SigmaStep=3):
         '''
         思路：吃饭先穿衣，把trainSet和trainLabel输入train函数之中，给他一个超参数组合，
         得到模型，将testSet输入预测函数中得到预测标签，testLabel和预测标签同时输入计算准确度函数
@@ -721,7 +759,7 @@ class svm(object):
                 predictTrain,temp=self.predict(model,trainSet)# i wanna ignore the p score ..
                 predictTest,temp=self.predict(model,testSet)  
                 #test the recall and predict on each class
-                print key
+       
                 self.predictEachClassCriteria(testLabel,predictTest) 
                 paraResult=ParaResult()
                 paraResult.trainAccuracy=self.predictPricision(trainLabel, predictTrain)
@@ -733,8 +771,7 @@ class svm(object):
                     ParaResultList[key]=[]
                     ParaResultList[key].append(paraResult)
 
-
-    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-13,Cend=11,Cstep=2):                
+    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-5,Cend=15,Cstep=4):                
         '''
         思想同上，不再赘述
         '''
@@ -742,7 +779,10 @@ class svm(object):
         for C in np.arange(Cstart,Cend,Cstep):
             key=str(C)
             #begin to training
-            model=self.train(X=trainSet,Y=trainLabel,modifyY=True,C=2**C,max_passes=20)
+            model=self.train(X=trainSet,Y=trainLabel,modifyY=True,C=2**C,max_passes=5)
+            if model.X.size==0:
+                print "model is None"
+                continue;
             print "first is",model.first,"second is",model.second
             '''
             TO-DO
@@ -816,7 +856,7 @@ class Model(object):
         
 if __name__=="__main__":
     svm=svm()
-    svm.testSearch(method="gaussian")
+    #svm.testSearch(method="gaussian")
 
 
     '''test the predictEachClassCriteria 
@@ -833,10 +873,22 @@ if __name__=="__main__":
     svm.predictEachClassCriteria(testLabel,predictTest)
     test end '''
 
-    #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec.txt")
-    #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec ig.txt")
-    #models=svm.multiClassOne2One(dataset=dataset,kernelFunction='gaussianKernel')
-    #svm.storeModels(models, 'D:\\Project\\Java\\svm\\model\\2class exp\\gaussian\\ig gaussian models.txt')
+    dataset=svm.readDatalibSvmFormToDict('C:\\Users\\weiwei\\Documents\\GitHub\\libsvm\\windows\\nospace.scale')
+    models=svm.readModels('D:\\Project\\Java\\svm\\model\\9 class\\linear\\chi linear 1v1 best models.txt');
+    print len(models)
+    X=[]
+    Y=[]
+    for key in dataset.keys():
+      lenY=len(Y)
+      lenX=len(dataset[key])
+      X.extend(dataset[key])
+      Y[lenY:lenY+lenX]=[key for row in range(0,lenX)]
+    preY=svm.multiClassPredict(models, X)
+    svm.predictEachClassCriteria(Y,preY)
+
+    #dataset=svm.readDatalibSvmFormToDict('C:\\Users\\weiwei\\Documents\\GitHub\\libsvm\\windows\\nospace.scale')
+    #models=svm.multiClassOne2One(dataset=dataset)
+    #svm.storeModels(models, 'D:\\Project\\Java\\svm\\model\\9 class\\linear\\chi linear 1v1 best models.txt')
     #X=[]
     #Y=[]
     #for key in dataset.keys():

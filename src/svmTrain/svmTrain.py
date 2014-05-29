@@ -440,7 +440,7 @@ class svm(object):
         pickle.dump(models, F)
         F.close();
     
-    def  readModels(self,modelsFile):
+    def readModels(self,modelsFile):
         '''
         read model from a file.
         '''
@@ -513,6 +513,77 @@ class svm(object):
         print len(models)
         return models
     
+
+    def selectBestModel(self,X,Y,first,second,Sigma,C,kernelFunction,tol,max_passes,crossSetNum=4):
+        '''
+        @return bestmodel
+        本函数主要目的是选择最好的模型出来，
+        函数内部主要分为两个环节：
+        1、将数据X,Y通过取余法分解成四个子集合
+        2、将每一个集合输入超参数选择算法最终得到每个超参数集合下的分类准确率
+
+        四个集合都试完之后，再进行平均各超参数组合下的平均分类准确率，
+        得到最大的那个平均准确率并返回。
+        '''
+        #get the subset
+        subSetX={}
+        subSetY={}
+        for i in range(0,crossSetNum):
+            subSetX[i]=X[i:len(X):crossSetNum]
+            subSetY[i]=X[i:len(Y):crossSetNum]
+        #begin to input to the parameter select function
+        ParaResultList={}
+        for i in range(crossSetNum):
+            #construct train and test set
+            testSet=subSetX[i]# attetion please here whether it will be changed in the training function?
+            testLabel=subSetY[i]
+            trainSet=[]
+            trainLabel=[]
+            for j in range(crossSetNum):
+                if j!=i:
+                    trainSet.extend(subSetX[j])
+                    trainLabel.extend(subSetY[j])
+            #here you may test if the subset is changed?
+            if method=="linear":
+                self.LinearGridSearch(trainSet=trainSet,trainLabel=trainLabel,testSet=testSet,testLabel=testLabel,ParaResultList=ParaResultList)
+            elif method=="gaussian":
+                print "gaussian"
+                self.GaussianGridSearch(trainSet=trainSet,trainLabel=trainLabel,testSet=testSet,testLabel=testLabel,ParaResultList=ParaResultList)
+            else:
+                print "no kernel"
+        
+        #get the highest accuracy...
+        highAccuracy=0;
+        highC=None;
+        print "key\ttrainAccuracy\t testAccuracy\t accuracy"
+        for key in ParaResultList.keys():
+            accuracySum=0
+            resultCount=0
+            for paraResult in ParaResultList[key]:
+                print str(key)+'\t'+str(paraResult.trainAccuracy)+'\t'+str(paraResult.testAccuracy)+'\t'+str(paraResult.accuracy);
+                accuracySum+=paraResult.testAccuracy
+                resultCount+=1
+            accuracy=accuracySum/resultCount
+            if accuracy>highAccuracy:
+                highAccuracy=accuracy
+                highC=key
+        X=trainSet
+        Y=trainLabel
+        if method="linear":
+            C=2**(float(highC))
+            model=self.train(X=X,Y=Y,first=first,second=second,C=C,kernelFunction="linearKernel",tol=tol,max_passes=max_passes)
+        else method="gaussian":
+            tmp=highC.split(",")
+            C=2**float(tmp[0])
+            Sigma=2**float(tmp[1])
+            model=self.train(X=X,Y=Y,first=first,second=second,C=C,Sigma=Sigma,kernelFunction="gaussianKernel",tol=tol,max_passes=max_passes)
+        else:
+            print "no method support"
+        #here should be known the accruacy on this two object?? if it is necessary?
+        print "the final and best C is "+str(highC)+" accuracy is "+str(highAccuracy);
+
+        return model
+
     def readDataSeq(self,datasetPath):
         X=[]
         Y=[]
@@ -539,7 +610,11 @@ class svm(object):
                     tempX[int(tt[0])-1]=float(tt[1])
                
                 X.append(tempX)
-        return (X,Y)
+        tmpX=X[0:len(X):2]
+        tmpX.extend(X[1:len(X):2])
+        tmpY=Y[0:len(Y):2]
+        tmpY.extend(Y[1:len(Y):2])
+        return (tmpX,tmpY)
        
     def readTrainData(self,datasetPath):
         '''
@@ -622,7 +697,7 @@ class svm(object):
         print "the final and best C is "+str(highC)+" accuracy is "+str(highAccuracy);
 
 
-    def GaussianGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=9,Cend=10,Cstep=1,SigmaStart=-7,SigmaEnd=-6,SigmaStep=1):
+    def GaussianGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-13,Cend=11,Cstep=4,SigmaStart=-13,SigmaEnd=3,SigmaStep=3):
         '''
         思路：吃饭先穿衣，把trainSet和trainLabel输入train函数之中，给他一个超参数组合，
         得到模型，将testSet输入预测函数中得到预测标签，testLabel和预测标签同时输入计算准确度函数
@@ -633,37 +708,39 @@ class svm(object):
         '''
         for C in np.arange(Cstart,Cend,Cstep):
             for Sigma in np.arange(SigmaStart,SigmaEnd,SigmaStep):
-                for passes in range(1,20,2):
-                    key=str(C)+","+str(Sigma);
-                    print key
-                    #begin to training
-                    model=self.train(X=trainSet,Y=trainLabel,modifyY=True,Sigma=2**Sigma,C=2**C,kernelFunction='gaussianKernel',max_passes=passes)
-                    if model.X.size==0:
-                        continue;
-                    print "first is",model.first,"second is",model.second
-                    '''
-                    TO-DO
-                    '''
-                    predictTrain,temp=self.predict(model,trainSet)# i wanna ignore the p score ..
-                    predictTest,temp=self.predict(model,testSet)   
-                    paraResult=ParaResult()
-                    paraResult.trainAccuracy=self.predictPricision(trainLabel, predictTrain)
-                    paraResult.testAccuracy=self.predictPricision(testLabel, predictTest)
-                    paraResult.accuracy=0.2*paraResult.trainAccuracy+0.8*paraResult.testAccuracy
-                    if(ParaResultList.has_key(key)):
-                        ParaResultList[key].append(paraResult)
-                    else:
-                        ParaResultList[key]=[]
-                        ParaResultList[key].append(paraResult)
+                key=str(C)+","+str(Sigma);
+                print key
+                #begin to training
+                model=self.train(X=trainSet,Y=trainLabel,modifyY=True,Sigma=2**Sigma,C=2**C,kernelFunction='gaussianKernel')
+                if model.X.size==0:
+                    continue;
+                print "first is",model.first,"second is",model.second
+                '''
+                TO-DO
+                '''
+                predictTrain,temp=self.predict(model,trainSet)# i wanna ignore the p score ..
+                predictTest,temp=self.predict(model,testSet)  
+                #test the recall and predict on each class
+                print key
+                self.predictEachClassCriteria(testLabel,predictTest) 
+                paraResult=ParaResult()
+                paraResult.trainAccuracy=self.predictPricision(trainLabel, predictTrain)
+                paraResult.testAccuracy=self.predictPricision(testLabel, predictTest)
+                paraResult.accuracy=0.2*paraResult.trainAccuracy+0.8*paraResult.testAccuracy
+                if(ParaResultList.has_key(key)):
+                    ParaResultList[key].append(paraResult)
+                else:
+                    ParaResultList[key]=[]
+                    ParaResultList[key].append(paraResult)
 
 
-    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-3.2,Cend=-2.5,Cstep=0.01):                
+    def LinearGridSearch(self,trainSet,trainLabel,testSet,testLabel,ParaResultList,Cstart=-13,Cend=11,Cstep=2):                
         '''
         思想同上，不再赘述
         '''
         
         for C in np.arange(Cstart,Cend,Cstep):
-            key=C
+            key=str(C)
             #begin to training
             model=self.train(X=trainSet,Y=trainLabel,modifyY=True,C=2**C,max_passes=20)
             print "first is",model.first,"second is",model.second
@@ -672,6 +749,9 @@ class svm(object):
             '''
             predictTrain,temp=self.predict(model,trainSet)# i wanna ignore the p score ..
             predictTest,temp=self.predict(model,testSet)   
+            #test the recall and predict on each class
+            print key
+            self.predictEachClassCriteria(testLabel,predictTest) 
             paraResult=ParaResult()
             paraResult.trainAccuracy=self.predictPricision(trainLabel, predictTrain)
             paraResult.testAccuracy=self.predictPricision(testLabel, predictTest)
@@ -736,10 +816,10 @@ class Model(object):
         
 if __name__=="__main__":
     svm=svm()
-    #svm.testSearch(method="gaussian")
+    svm.testSearch(method="gaussian")
 
 
-    '''test the predictEachClassCriteria '''
+    '''test the predictEachClassCriteria 
     (trainSet,trainLabel)=svm.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/tools/train.txt")
     (testSet,testLabel)=svm.readDataSeqLibsvmForm("C:/Users/weiwei/Documents/GitHub/libsvm/tools/test.txt")
         
@@ -751,7 +831,7 @@ if __name__=="__main__":
     svm.predictEachClassCriteria(trainLabel,predictTrain)
     print "test:"
     svm.predictEachClassCriteria(testLabel,predictTest)
-    '''test end '''
+    test end '''
 
     #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec.txt")
     #dataset=svm.readTrainData("D:\\Project\\Java\\helloWorld\\svmData\\2class exp\\Training docVec ig.txt")
